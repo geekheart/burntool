@@ -104,6 +104,7 @@ def flash(firmware, com, baud):
         else:
             logging.error(
                 f"Failed to send firmware. Status code: {status_code}")
+        logging.info(response.json()["reason"])
     except requests.RequestException as e:
         logging.error(f"HTTP request error: {e}")
 

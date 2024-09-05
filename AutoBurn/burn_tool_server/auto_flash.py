@@ -7,9 +7,13 @@ from pathlib import Path
 import threading
 import serial.tools.list_ports
 import serial
+import queue
 
 CONFIG_ROOT_PATH: str = Path(".")
 CONFIG_BURNTOOL: str = CONFIG_ROOT_PATH / "BurnTool/BurnTool.exe"
+
+stop_flag = threading.Event()
+result_queue = queue.Queue()
 
 
 def flash(com: int, bin: str,
@@ -26,26 +30,6 @@ def flash(com: int, bin: str,
     if not os.path.exists(bin):
         return
     bin = os.path.abspath(bin)
-    ser = serial.Serial(
-        port=f"COM{com}",  # 串口号，根据实际情况修改
-        baudrate=baud,  # 波特率，根据实际情况修改
-        timeout=1  # 超时时间，根据实际情况修改
-    )
-
-    try:
-        if ser.isOpen():
-            logging.info(f"Serial{com} port is open.")
-            # 设置 RTS 为高电平
-            ser.setRTS(True)
-            time.sleep(1)
-            logging.info("device is reset")
-
-        else:
-            logging.info("Serial port is not open.")
-
-    finally:
-        # 关闭串口
-        ser.close()
 
     burn_tool_path = os.path.join(CONFIG_ROOT_PATH, CONFIG_BURNTOOL)
     burn_tool_path = os.path.realpath(burn_tool_path)
@@ -77,19 +61,23 @@ def flash(com: int, bin: str,
     logging.info(f"cmd:{cmd_str}")
     # 调用外部程序
     logging.info(f"cmd:{cmd}")
-    output = subprocess.run(cmd)
-    if output.returncode == 1:
-        logging.info("Retry...")
-        time.sleep(1)  # 等待一秒
-        subprocess.run(cmd)
-
+    subprocess.run(cmd)
     logging.info("serial close")
 
 
 def auto_flash_task(port_list, baudrate, bin):
     if not os.path.exists(bin):
+        stop_flag.set()
+        result_queue.put((False, "bin not exist"))
         return
-    flash(int(port_list[1][3:]), bin, baudrate)
+    try:
+        flash(int(port_list[1][3:]), bin, baudrate)
+    except Exception as e:
+        stop_flag.set()
+        result_queue.put((False, e))
+        return
+    stop_flag.set()
+    result_queue.put((True, "Success flash"))
 
 
 def list_serial_ports():
@@ -102,55 +90,73 @@ def list_serial_ports():
     return com0com
 
 
-def serial_forwarding_task(port_list, baudrate, com):
-    # 配置虚拟串口
-    port_host = serial.Serial(port_list[0], baudrate=115200, timeout=1)
-    port_device = serial.Serial(com, baudrate=115200, timeout=1)
-
+def serial_forwarding_task(port_host, port_device, baudrate):
     key_words = b'\xef\xbe\xad\xde\x12\x00\xf0\x0f'
     boot_words = b'boot.'
     reset = False
     recv_data = b""
     send_data = b""
     # 进行数据转发和 RTS 控制
-    while True:
-        if port_host.in_waiting > 0:
-            send_data = port_host.read(port_host.in_waiting)
-            port_device.write(send_data)
-            if key_words in send_data and not reset:
-                # 控制 RTS 信号
-                reset = True
-                print("reset")
-                port_device.setRTS(True)
-                time.sleep(0.5)  # 短暂保持 RTS 信号
-                port_device.setRTS(False)
+    while stop_flag.is_set() is False:
+        try:
+            if port_host.in_waiting > 0:
+                send_data = port_host.read(port_host.in_waiting)
+                port_device.write(send_data)
+                if key_words in send_data and not reset:
+                    # 控制 RTS 信号
+                    reset = True
+                    print("reset")
+                    port_device.setRTS(True)
+                    time.sleep(0.5)  # 短暂保持 RTS 信号
+                    port_device.setRTS(False)
 
-        if port_device.in_waiting > 0:
-            if boot_words in recv_data:
-                port_device.baudrate = baudrate
-                port_host.baudrate = baudrate
-            recv_data = port_device.read(port_device.in_waiting)
-            port_host.write(recv_data)
+            if port_device.in_waiting > 0:
+                if boot_words in recv_data:
+                    port_device.baudrate = baudrate
+                    port_host.baudrate = baudrate
+                recv_data = port_device.read(port_device.in_waiting)
+                port_host.write(recv_data)
+        except Exception as e:
+            stop_flag.set()
+            result_queue.put((False, e))
+    stop_flag.clear()
 
 
 def auto_flash(com, bin, baud):
     port_list = list_serial_ports()
+
+    try:
+        port_host = serial.Serial(port_list[0], baudrate=115200, timeout=1)
+    except Exception as e:
+        return False, "serial open fail" + str(e)
+    try:
+        port_device = serial.Serial(com, baudrate=115200, timeout=1)
+    except Exception as e:
+        port_host.close()
+        return False, "serial open fail" + str(e)
+
+    logging.info("serial open")
+
     # 创建线程
     auto_flash_thread = threading.Thread(
         target=auto_flash_task, args=(port_list, baud, bin))
     serial_forwarding_thread = threading.Thread(
-        target=serial_forwarding_task, args=(port_list, baud, com))
+        target=serial_forwarding_task, args=(port_host, port_device, baud))
 
     # 设置守护线程
-    auto_flash_thread.setDaemon(True)
     serial_forwarding_thread.setDaemon(True)
+    auto_flash_thread.setDaemon(True)
 
     # 启动线程
-    auto_flash_thread.start()
     serial_forwarding_thread.start()
-
+    auto_flash_thread.start()
     # 等待线程结束
-    auto_flash_thread.join()
+
+    result = result_queue.get(block=True)
+    port_host.close()
+    port_device.close()
+    print(result)
+    return result
 
 
 if __name__ == "__main__":

@@ -61,11 +61,18 @@ class SimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 elif name == "baud":
                     baud = part.get_payload(decode=False)
                     print(baud, type(baud))
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b'{"status": "success", "size": %d}' %
-                         len(firmware_data))
-        auto_flash(f"COM{com}", CONFIG_BIN_NAME, int(baud))
+
+        status, result = auto_flash(f"COM{com}", CONFIG_BIN_NAME, int(baud))
+        if status:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(
+                b'{"status": "success", "size": %d}' % len(firmware_data))
+        else:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(
+                b'{"status": "fail", "reason": "%s"}' % result.encode('utf-8'))
 
 
 @click.command()
