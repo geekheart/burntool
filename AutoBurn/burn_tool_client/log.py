@@ -4,7 +4,7 @@ import logging
 
 
 class ColoredFormatter(logging.Formatter):
-    COLORS: dict[str, str] = {
+    COLORS: dict = {
         'NOTSET': '\033[97m',
         'DEBUG': '\033[94m',
         'INFO': '\033[92m',
