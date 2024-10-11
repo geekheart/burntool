@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='AutoBurn',
-    version='0.2.1',
+    version='0.3.0',
     author='kirto',
     author_email='sky.kirto@qq.com',
     description="A tools for Burn",
@@ -18,11 +18,9 @@ setup(
     install_requires=[
         'click',
         'pyserial',
-        'requests'
     ],
     entry_points='''
         [console_scripts]
-        btc=AutoBurn.burn_tool_client.main:cli
-        bts=AutoBurn.burn_tool_server.main:server
+        burn=AutoBurn.autoBurn:flash_firmware
     ''',
 )

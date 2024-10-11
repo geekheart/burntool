@@ -1,47 +1,51 @@
-# 基于BurnTool的自动下载脚本
+# WS63自动下载脚本
+
+之前版本由于没弄清楚协议内容，导致使用官方的烧录工具和 com0com ，间接实现。
+本脚本是通过解析 ws63 的烧录时序，通过 pyserial 实现烧录功能。
 
 ## 安装流程
 
-安装本python包
+1. clone 本仓库
 ```shell
+git clone https://github.com/geekheart/burntool.git
+```
+
+2. 安装本仓库的 python 包
+```shell
+cd burntool
 pip install .
 ```
 
-安装com0com。在com0com文件夹下
-
 ## 使用教程
 
-1. 创建服务端。 windows 系统下
+1. burn --help
 ```shell
-Usage: bts [OPTIONS]
+Usage: burn [OPTIONS] FIRMWARE_FILE
+
+  烧录ws63固件
 
 Options:
-  -v, --verbose       打开调试的log
-  -p, --port INTEGER  开启服务的端口号
+  -v, --verbose           打印一些调试信息.
+  -p, --port TEXT         指定串口号.
+  -b, --baudrate INTEGER  设置串口波特率.
+  -s, --show              仅展示固件信息.
+  --help                  Show this message and exit.
 ```
 
-2. 配置客户端。linux 系统下
-wsl用户使用ip为127.0.0.1。 
-```shell
-Usage: btc config [OPTIONS]
-
-Options:
-  -i, --ip TEXT       保存远端的IP地址
-  -p, --port INTEGER  保存远端的端口号
-  -b, --baud INTEGER  保存远端串口的波特率
-  -c, --com INTEGER   保存远端串口的编号
-```
-
-3. 烧录固件。linux 系统下
+2. 烧录固件 
 
 ```shell
-Usage: btc flash [OPTIONS] FIRMWARE
-
-  上传固件
-
-Options:
-  -c, --com INTEGER   指定烧录串口编号
-  -b, --baud INTEGER  指定烧录的波特率
-
+# linux
+burn XXXXX.fwpkg -p /dev/ttyUSBx
+# windows
+burn XXXXX.fwpkg -p COMx
 ```
 
+3. 仅展示固件信息
+```shell
+burn XXXXX.fwpkg -s
+```
+
+## 参考资料
+
+[https://github.com/goodspeed34/ws63flash](https://github.com/goodspeed34/ws63flash)
